@@ -1,8 +1,9 @@
-# NeatFeed 产品规格 v0.3
+# NeatFeed 产品规格 v0.4
 
 > 工作名 `NeatFeed`（采石场：持续开采、堆积、随时取用），包名与中文名待定，见第 14 节。
 > **v0.2 变更**：采集与库提前成为 v1 的唯一产物；选题流与提问整体后移到 v1.5（设计不变，实现推后）。
 > **v0.3 变更**：确立「传输 × 抽取 × 计划」的统一采集抽象（平台只是配方）；条目契约定为四段 + 两条时间；标签归一与媒体策略进入 v1；UX 承诺改成三个可测数字。
+> **v0.4 变更**：**推翻「只存 URL」**。媒体改为每源 × 每类型的四档策略（默认不保留），下载必须发生采集当场；新增 AI 摘要档，把图/视频变成可检索文本。
 > 仓库：https://github.com/Qiuses/neatfeed（2026-11-09 创建，公开）
 > 本文是动工前的唯一依据。改产品先改这份文件，再改代码。
 
@@ -240,16 +241,34 @@ question
 
 这条链是「可回溯」真正落地的地方，也是用户判断某条能不能引用的唯一依据。它必须出现在详情抽屉和导出文件里，不能只躺在数据库里。
 
-### 6.4 媒体策略（别让库变成硬盘杀手）
+### 6.4 媒体：默认不保留，但「保留」这个能力要真的能用
 
-| 类型 | v1 策略 | 理由 |
-|---|---|---|
-| 图片 | 存 URL + 只缓存封面/首图（≤2 张/条） | 列表要缩略图，正文图按需 |
-| 视频 | 只存 URL + 元数据（平台/时长/封面） | 文件太大且会失效 |
-| 附件 | 只存 URL + 文件名/大小 | 同上 |
-| 正文 HTML | 仅在该条含媒体时保留 | 否则只存纯文本 |
+**前提判断（本节推翻了 v0.3）**：URL 不是稳定的东西。抖音、小红书、公众号的媒体链接带签名和时效，几小时到几天就废，还常带防盗链。**只存 URL 等于什么都没存。**
 
-坏链：条目的媒体 URL 每 30 天抽查一次，失效标 `dead`，界面显示「图片已失效」而不是空白块。
+所以「存不存媒体」不能全局一刀切，必须是**每个源自己的配置**；而且图片和视频的成本差一个数量级，得分开配。
+
+**四档策略，图片 / 视频 / 附件 各自独立选**（可以「图=下载、视频=摘要」）：
+
+| 档 | 行为 | 成本 | 典型适用 |
+|---|---|---|---|
+| `none`（默认） | 不下载、不留地址，只记媒体数量与类型 | 0 | 文字为主的源：RSS、新闻、知乎 |
+| `thumb` | 只缓存缩略图（≤200px、≤20KB），原地址只留作溯源 | 极低 | 图片就是内容的源：小红书 |
+| `download` | 下载原文件入库，导出时一并带出 | 高（磁盘） | 需要二次使用素材的源 |
+| `summarize` | AI 把图/视频总结成文字入库，**不存文件** | 中（token） | 抖音、长视频、信息图 |
+
+**默认值由配方带，不是全局常量**：通用默认 `none`；平台配方可带自己的默认（小红书 `thumb`、抖音 `summarize`、公众号 `none`），用户随时可覆盖。这样「默认不保留」和「平台差异」不打架。
+
+**三条硬约束**（不写进代码就会出事）：
+
+1. **下载必须发生在采集当场。** 签名地址会过期，事后「点开再取」取不到。所以 `download` 是采集管线的一步，不是按需加载。
+2. **配额**：单源每日上限（默认 200 个文件 / 500MB）+ 全局磁盘阈值（默认 5GB）。超限自动降级为 `none`，源卡片标黄写明原因；全局超阈值只告警、不自动删用户文件。
+3. **摘要必须可辨**：摘要文本标 `AI 摘要`，保留原始地址与抓取时间，且**不进可引用正文**，除非用户点开确认。否则「可回溯」这条底线就断了。
+
+**摘要的真正价值不是省空间，是可检索。** 图里的字、视频里的话一旦变成文本，就能被全文搜到。对「库」这个产品来说，一张被摘要过的图，比一张躺在硬盘里的原图更有用。
+
+**视频摘要取法优先级**：字幕 / 口播文案 → 封面 + 3 帧 → 不做。不要为了摘要去跑一小时视频。
+
+**导出时的媒体**：`download` 档的文件随 Markdown 打成一个 `assets/` 文件夹；Word 内嵌；`none` 档只输出「本条含 3 张图（未保留）」，不假装有。
 
 ### 6.5 表结构
 
@@ -258,8 +277,11 @@ source(id, name, platform, transport, extractor, target, config_json,
        schedule, enabled, health, last_run_at, next_run_at)
 
 item(id, source_id, url, url_key, title, origin_title,
-     text, html, media_json, metrics_json, source_note,
+     text, html, media_count, metrics_json, source_note,
      published_at, fetched_at, lang, content_hash, state)
+
+media(id, item_id, kind, role, policy, state, local_path, remote_url,
+      bytes, width, height, duration, summary_text, summary_model, fetched_at)
 
 tag(id, canonical, aliases_json)
 item_tag(item_id, tag_id)
@@ -273,6 +295,8 @@ topic(id, day, title, score, reasons_json, item_ids_json, status)
 research(id, question, plan_json, coverage_json, item_ids_json, status, created_at)
 doc(id, research_id, format, path, citations_json, created_at)
 ```
+
+media 约定：`kind` ∈ `image / video / attachment`；`policy` 是该条实际执行的档（none / thumb / download / summarize）；`state` ∈ `skipped / cached / file / summary / dead`；`none` 档**不落** `remote_url`（只在采集过程中存在于内存）。
 
 约定：`url_key` = 规范化 URL（去 utm、去锚点）；`content_hash` = 正文 simhash；`metrics_json` 至少含 `{views, likes, comments, shares}`，拿不到写 `null`——**不做假 0**（假 0 会让以后的选题算法全部错判）。
 
@@ -298,6 +322,8 @@ cordis.patch.yml
 | 正文抽取 | `@mozilla/readability` + `linkedom`，turndown 转 md | 成熟、轻 |
 | 浏览器 | `puppeteer-core` + 系统 Chrome/Edge，`userDataDir` 指向 DSH 数据目录 | 不下载 Chromium，市场友好 |
 | 调度 | 宿主内定时器 + `next_run_at` 落库 | 重启不丢计划 |
+| 媒体管线 | 采集时同步执行：下载 / 缩略图（sips 或 sharp）/ 摘要；文件落 `data/media/<item_id>/` | 签名地址会过期，只能当场取 |
+| 磁盘配额 | 单源日上限 + 全局阈值，落在 `settings` 表，超限降级 | 视频下载最容易被忽略的坑 |
 | 模型 | v1 几乎不用；默认走 DSH 宿主模型，可选用户 key | v1 对模型依赖极低，装完就能用 |
 | 前端 | 面板 iframe、零构建（原生 JS + SSR 片段） | 改版成本低 |
 
@@ -355,7 +381,10 @@ cordis.patch.yml
 | 11 | **首条时间**：装好到看见第一条真实条目 ≤ 3 分钟 |
 | 12 | **单条收录**：贴一条 URL 到出现在库里 ≤ 20 秒（浏览器路径 ≤ 60 秒） |
 | 13 | **标签归一**：200 条样本里同义标签合并率 ≥ 90%；标签总数 ≤ 条目数的 1.5 倍 |
-| 14 | **坏链可见**：失效媒体显示「已失效」，不出现空白块 |
+| 14 | **媒体档位生效**：同一源从 `none` 切到 `download` 后，下一条采集立即下载文件，导出时随 Markdown 带出 |
+| 15 | **签名过期验证**：小红书/抖音源的媒体在采集当场下载，72 小时后本地文件仍可打开 |
+| 16 | **摘要可辨**：AI 摘要条目在详情与导出里都标「AI 摘要」，原始地址可点回 |
+| 17 | **配额降级**：单源超每日上限自动降为 `none`，源卡片标黄并写明原因 |
 
 ---
 
@@ -423,7 +452,9 @@ icon: https://raw.githubusercontent.com/<owner>/neatfeed/main/assets/icon-180.pn
 | 先做库，发布时"没有 AI 感" | 市场里像工具不像智能插件 | 接受。v1 卖"库"，v1.5 卖"提问"；两个版本各讲一件事 |
 | **采集方式膨胀**：每种新方式都带新失败模式 | 维护成本随方式数线性上涨，最终没人敢改 | 抽象边界只到「传输 / 抽取」，平台是配方；每加一种方式先证明有 3 个真实用户在要 |
 | **标签长尾失控** | 半年后筛不动，库退化成「一堆条目」 | 归一 + 阈值展示 + 手动合并，v1 就要做，不能留到以后 |
-| **媒体烂链 / 硬盘杀手** | 体验崩，用户以为插件坏了 | 只存 URL + 封面缓存 + 坏链标记 |
+| **磁盘暴涨**（视频开了 download） | 用户机器被塞满，直接卸载 | 默认 `none`；视频默认 `summarize`；单源上限 + 全局阈值告警 |
+| **事后补抓失败**（签名过期） | 用户以为数据还在，其实早没了 | 下载只在采集当场；UI 明确写「未保留」，不假装有 |
+| **摘要幻觉被当成事实** | 库的可信度一次性归零 | 摘要标记 + 不进可引用正文 + 原链永远留着 |
 | 与 sel-feed 自我竞争 | 精力分散 | sel-feed 是流水线，NeatFeed 是库；不再给 sel-feed 加同类功能 |
 
 ---
@@ -499,3 +530,5 @@ icon: https://raw.githubusercontent.com/<owner>/neatfeed/main/assets/icon-180.pn
 | 23 | 条目契约 | 四段：一句话标题 + 多个标签 + 文本/图片/视频内容 + 来源说明；`published_at` 与 `fetched_at` 分开 |
 | 24 | 竞争判断 | 抓取层已饱和（BrowserSkill 9,929★、ego-browser 24,643 下载、dsh-rss 等）；空位在「库」——没人把采集结果做成可翻可搜可导出的表 |
 | 25 | UX 承诺 | 「慢慢打磨体验」不可证伪，改成三个数：首条 ≤3 分钟 / 搜索 ≤300ms / 贴链接 ≤20 秒 |
+| 26 | **媒体存储** | **推翻只存 URL**：签名地址会过期。改为每源 × 每类型四档（none 默认 / thumb / download / summarize），默认值由配方带 |
+| 27 | 媒体下载时机 | 必须在采集当场下载，不做「点开再取」；配额超限自动降级为 none |
