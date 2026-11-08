@@ -2,6 +2,7 @@
 
 > 工作名 `NeatFeed`（采石场：持续开采、堆积、随时取用），包名与中文名待定，见第 14 节。
 > **v0.2 变更**：采集与库提前成为 v1 的唯一产物；选题流与提问整体后移到 v1.5（设计不变，实现推后）。
+> 仓库：https://github.com/Qiuses/neatfeed（2026-11-09 创建，公开）
 > 本文是动工前的唯一依据。改产品先改这份文件，再改代码。
 
 ---
@@ -356,6 +357,7 @@ icon: https://raw.githubusercontent.com/<owner>/neatfeed/main/assets/icon-180.pn
 | 项 | 值 |
 |---|---|
 | 仓库名 | `neatfeed` |
+| 仓库地址 | https://github.com/Qiuses/neatfeed |
 | npm 包名 | `neatfeed`（已查：npm registry 返回 404，未占用） |
 | 市场条目文件 | `data/plugins/<owner>__neatfeed.yml` |
 | 中文名 | 暂不启用，对外统一用 NeatFeed，避免中英两套叫法 |
@@ -388,3 +390,6 @@ icon: https://raw.githubusercontent.com/<owner>/neatfeed/main/assets/icon-180.pn
 | 16 | 名字 | **NeatFeed**（npm 与市场均无占用） |
 | 17 | 仓库位置 | `~/Developer/neatfeed`（**不放 iCloud**：`.git` 与 `node_modules` 在同步盘里会冲突甚至损坏） |
 | 18 | 当前阶段 | 只建仓库，不写代码；仓库先晾满 1 天以满足市场收录要求 |
+| 19 | 仓库状态 | ✅ 已建并推送：`Qiuses/neatfeed`（公开，`main`，初始提交含 README/LICENSE/SPEC） |
+| 20 | 1 天时钟 | 仓库创建于 2026-11-08T16:35:47Z → **2026-11-10 00:35 CST 起可提交市场收录** |
+| 21 | 发布链 | GitHub ✅ 已登录（gh，账号 Qiuses）；**npm ❌ 未登录**，发版前必须解决 |
