@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+*.log
+
+# local data
+*.db
+*.db-journal
+*.db-wal
+exports/
+.env
+.env.*
+
+# build output
+dist/
